@@ -1,0 +1,106 @@
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'loading.dart'; // Import the loading screen
+import 'destination.dart'; // Import the destination screen
+
+class Screen1 extends StatefulWidget {
+  final SharedPreferences prefs;
+  
+  Screen1({super.key, required this.prefs});
+
+  @override
+  State<Screen1> createState() => _Screen1State();
+}
+
+class _Screen1State extends State<Screen1> {
+  double containerSize = 200.0; // Initial size of the container
+  bool isCircle = false; // Flag to determine if the shape is a circle
+
+  void _setShape(bool circle) {
+    setState(() {
+      isCircle = circle;
+    });
+  }
+
+  void _increaseSize() {
+    setState(() {
+      containerSize += 20;
+    });
+  }
+
+  void _decreaseSize() {
+    setState(() {
+      containerSize = (containerSize - 20).clamp(100.0, double.infinity);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Screen 1'),
+      ),
+      body: Container(
+        // Background image for the whole page
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('petti/sky.jpg'), // Replace with your background image asset path
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Center(
+                child: AnimatedContainer(
+                  duration: Duration(seconds: 1),
+                  width: containerSize,
+                  height: containerSize,
+                  decoration: BoxDecoration(
+                    color: Color.fromARGB(255, 33, 149, 243),
+                    shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
+                  ),
+                ),
+              ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: Icon(Icons.circle,
+                  color: Colors.white),
+                  onPressed: () {
+                    _setShape(true); // Set shape to circle
+                  },
+                ),
+                IconButton(
+                  icon: Icon(Icons.square,
+                   color: Colors.white),
+                  onPressed: () {
+                    _setShape(false); // Set shape to square
+                  },
+                ),
+                IconButton(
+                  icon: Icon(Icons.add,
+                   color: Colors.white),
+                  onPressed: () {
+                    _increaseSize();
+                  },
+                ),
+                IconButton(
+                  icon: Icon(Icons.remove,
+                   color: Colors.white),
+                  onPressed: () {
+                    _decreaseSize();
+                  },
+                ),
+              ],
+            ),
+            SizedBox(height: 50), // Add some space below the buttons if needed
+          ],
+        ),
+      ),
+    );
+  }
+}
