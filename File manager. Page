@@ -1,0 +1,337 @@
+import 'package:filemanager/imageview.dart';
+import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'dart:math';
+import 'package:path/path.dart' as path;
+import 'package:share_plus/share_plus.dart';
+
+class FileManagerPage extends StatefulWidget {
+  @override
+  _FileManagerPageState createState() => _FileManagerPageState();
+}
+
+class _FileManagerPageState extends State<FileManagerPage> {
+  late Directory currentDirectory = Directory('/storage/emulated/0');
+  List<FileSystemEntity> files = [];
+  bool isLoading = true;
+  final AudioPlayer audioPlayer = AudioPlayer();
+  String filterType = "All";
+  File? copiedFile; // To store the copied file
+  FileSystemEntity? selectedFile; // Store long-pressed file
+
+  @override
+  void initState() {
+    super.initState();
+    _requestPermissions().then((granted) {
+      if (granted) {
+        _loadFiles(currentDirectory.path);
+      }
+    });
+  }
+
+  Future<bool> _requestPermissions() async {
+    if (await Permission.storage.request().isGranted) {
+      return true;
+    }
+
+    if (Platform.isAndroid &&
+        await Permission.manageExternalStorage.status.isDenied) {
+      if (await Permission.manageExternalStorage.request().isGranted) {
+        return true;
+      } else {
+        await _openSettings();
+        return false;
+      }
+    }
+
+    return false;
+  }
+
+  Future<void> _openSettings() async {
+    const intent = AndroidIntent(
+      action: 'android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION',
+      flags: [Flag.FLAG_ACTIVITY_NEW_TASK],
+    );
+    await intent.launch();
+  }
+
+  Future<void> _loadFiles(String path) async {
+    try {
+      setState(() {
+        isLoading = true;
+      });
+
+      currentDirectory = Directory(path);
+      if (await currentDirectory.exists()) {
+        List<FileSystemEntity> loadedFiles = currentDirectory.listSync();
+        setState(() {
+          files = loadedFiles.where((file) => _applyFilter(file)).toList();
+          isLoading = false;
+        });
+      } else {
+        print('Directory does not exist: $path');
+      }
+    } catch (e) {
+      print('Error loading files: $e');
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  bool _applyFilter(FileSystemEntity entity) {
+    String extension = entity.path.split('.').last.toLowerCase();
+    if (filterType == "Images") {
+      return ['jpg', 'jpeg', 'png', 'gif'].contains(extension);
+    } else if (filterType == "Music") {
+      return ['mp3', 'wav'].contains(extension);
+    } else if (filterType == "Documents") {
+      return ['pdf', 'doc', 'docx', 'txt'].contains(extension);
+    }
+    return true;
+  }
+
+  void _navigateToDirectory(String path) {
+    _loadFiles(path);
+  }
+
+  Widget _buildFileItem(FileSystemEntity entity) {
+    bool isDirectory = FileSystemEntity.isDirectorySync(entity.path);
+    String name = entity.path.split('/').last;
+    String size = isDirectory ? '' : _formatFileSize(entity.statSync().size);
+    String date = _formatDate(entity.statSync().modified);
+
+    return Card(
+      margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      elevation: 2,
+      child: ListTile(
+        leading: _buildLeadingIcon(entity),
+        title: Text(name, style: TextStyle(fontSize: 16)),
+        subtitle: Text(isDirectory ? 'Directory.....' : '$size - $date',
+            style: TextStyle(fontSize: 12, color: Colors.grey)),
+        onTap: () {
+          if (isDirectory) {
+            _navigateToDirectory(entity.path);
+          } else {
+            _handleFileTap(entity);
+          }
+        },
+        onLongPress: () {
+          setState(() {
+            selectedFile = entity; // Set selected file on long press
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildLeadingIcon(FileSystemEntity entity) {
+    String extension = entity.path.split('.').last.toLowerCase();
+    if (FileSystemEntity.isDirectorySync(entity.path)) {
+      return Icon(Icons.folder, color: Colors.blue);
+    } else if (['jpg', 'jpeg', 'png', 'gif'].contains(extension)) {
+      return Icon(Icons.image, color: Colors.orange);
+    } else if (['mp3', 'wav'].contains(extension)) {
+      return Icon(Icons.audiotrack, color: Colors.green);
+    } else if (['pdf', 'doc', 'docx', 'txt'].contains(extension)) {
+      return Icon(Icons.description, color: Colors.red);
+    } else {
+      return Icon(Icons.insert_drive_file, color: Colors.grey);
+    }
+  }
+
+  void _handleFileTap(FileSystemEntity entity) async {
+    String extension = entity.path.split('.').last.toLowerCase();
+    if (['mp3', 'wav'].contains(extension)) {
+      await audioPlayer.play(DeviceFileSource(entity.path));
+    } else if (['jpg', 'jpeg', 'png', 'gif'].contains(extension)) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (context) => ImageViewerScreen(imagePath: entity.path)),
+      );
+    } else {
+      print('Opening file: ${entity.path}');
+    }
+  }
+
+  // PopupMenu with File Options in AppBar
+  Widget _buildPopupMenu() {
+    return selectedFile != null
+        ? PopupMenuButton<String>(
+            onSelected: (String result) {
+              if (result == 'Copy') {
+                _copyFile(selectedFile!);
+              } else if (result == 'Move') {
+                _moveFile(selectedFile!);
+              } else if (result == 'Delete') {
+                _deleteFile(selectedFile!);
+              } else if (result == 'Paste') {
+                _pasteFile();
+              } else if (result == 'Share') {
+                _shareFile(selectedFile!);
+              }
+            },
+            itemBuilder: (BuildContext context) {
+              return ['Copy', 'Move', 'Delete', 'Paste', 'Share']
+                  .map((String choice) {
+                return PopupMenuItem<String>(
+                  value: choice,
+                  child: Text(choice),
+                );
+              }).toList();
+            },
+          )
+        : Container(); // Show empty if no file selected
+  }
+
+  void _shareFile(FileSystemEntity entity) async {
+    final result = await Share.shareXFiles([XFile(entity.path)],
+        text: "Sharing items.."); // Add share functionality
+    print(result);
+  }
+
+  void _copyFile(FileSystemEntity entity) {
+    copiedFile = File(entity.path); // Store the copied file for pasting
+    print('Copied file: ${entity.path}');
+  }
+
+  void _moveFile(FileSystemEntity entity) {
+    copiedFile = File(entity.path); // Store the file to move
+    print('File marked for moving: ${entity.path}');
+  }
+
+  void _deleteFile(FileSystemEntity entity) {
+    try {
+      entity.deleteSync(); // Delete the file or directory
+      print('Deleted file: ${entity.path}');
+      _loadFiles(currentDirectory.path); // Refresh the file list
+
+      // Show a Snackbar on successful deletion
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('File deleted successfully!'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      print('Error deleting file: $e');
+
+      // Show a Snackbar on error
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error deleting file: $e'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  void _pasteFile() {
+    if (copiedFile != null) {
+      try {
+        // Generate new path in the current directory for the copied/moved file
+        String newPath =
+            path.join(currentDirectory.path, path.basename(copiedFile!.path));
+
+        // Check if a file already exists at the destination to avoid overwriting
+        if (File(newPath).existsSync()) {
+          print('File already exists at destination: $newPath');
+        }
+
+        // Copy or move the file based on the action
+        copiedFile!.copySync(newPath); // Copy the file to the new path
+        print('Pasted file: ${copiedFile!.path} to $newPath');
+
+        if (copiedFile!.existsSync()) {
+          copiedFile!
+              .deleteSync(); // Optionally delete the original if it was moved
+          print('Moved file: ${copiedFile!.path}');
+        }
+
+        _loadFiles(currentDirectory
+            .path); // Reload the current directory to reflect changes
+      } catch (e) {
+        print('Error pasting file: $e');
+      } finally {
+        setState(() {
+          copiedFile = null; // Clear the copied file after pasting
+        });
+      }
+    } else {
+      print('No file copied or moved to paste.');
+    }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes <= 0) return "0 B";
+    const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var i = (log(bytes) / log(1024)).floor();
+    return '${(bytes / pow(1024, i)).toStringAsFixed(2)} ${suffixes[i]}';
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: currentDirectory.path == '/storage/emulated/0'
+            ? null
+            : IconButton(
+                icon: Icon(Icons.arrow_back),
+                onPressed: () {
+                  _navigateToDirectory(currentDirectory.parent.path);
+                },
+              ),
+        title: Text('File Manager'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: () {
+              _loadFiles(currentDirectory.path);
+            },
+          ),
+          _buildPopupMenu(), // Display Popup Menu in AppBar
+      
+        ],
+      ),
+      body: isLoading
+          ? Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              itemCount: files.length,
+              itemBuilder: (context, index) {
+                return _buildFileItem(files[index]);
+              },
+            ),
+    );
+  }
+}
+
+
+ 
+
+
+    // PopupMenuButton<String>(
+    //         onSelected: (String result) {
+    //           setState(() {
+    //             filterType = result;
+    //           });
+    //           _loadFiles(currentDirectory.path);
+    //         },
+    //         itemBuilder: (BuildContext context) {
+    //           return ['All', 'Images', 'Music', 'Documents']
+    //               .map((String choice) {
+    //             return PopupMenuItem<String>(
+    //               value: choice,
+    //               child: Text(choice),
+    //             );
+    //           }).toList();
+    //         },
+    //       ),
