@@ -1,0 +1,22 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+
+
+class ImageViewerScreen extends StatelessWidget {
+  final String imagePath;
+
+  ImageViewerScreen({required this.imagePath});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Image Viewer'),
+      ),
+      body: Center(
+        child: Image.file(File(imagePath)), // Display the image
+      ),
+    );
+  }
+}
