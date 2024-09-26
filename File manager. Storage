@@ -1,0 +1,85 @@
+import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+class PermissionRequestPage extends StatefulWidget {
+  const PermissionRequestPage({super.key});
+
+  @override
+  _PermissionRequestPageState createState() => _PermissionRequestPageState();
+}
+
+class _PermissionRequestPageState extends State<PermissionRequestPage> {
+  bool _permissionsGranted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPermissions();
+  }
+
+  Future<void> _checkPermissions() async {
+    // Request photos, videos, and audio permissions
+    PermissionStatus photoStatus = await Permission.photos.status;
+    PermissionStatus videoStatus = await Permission.videos.status;
+    PermissionStatus audioStatus = await Permission.audio.status;
+
+    if (photoStatus.isDenied || videoStatus.isDenied || audioStatus.isDenied) {
+      // If permissions are not granted, show button to request them
+      setState(() {
+        _permissionsGranted = false;
+      });
+    } else {
+      // If permissions are already granted, move on
+      setState(() {
+        _permissionsGranted = true;
+      });
+      Navigator.of(context).pop(true); // Permissions granted, close the page
+    }
+  }
+
+  Future<void> _requestPermissions() async {
+    // Request the permissions one by one
+    await Permission.photos.request();
+    await Permission.videos.request();
+    await Permission.audio.request();
+
+    // Re-check the permission statuses
+    await _checkPermissions();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Permission Request'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'This app needs access to your photos, videos, and audio to function correctly. '
+                'Please grant the required permissions.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16),
+              ),
+              SizedBox(height: 20),
+              if (!_permissionsGranted)
+                ElevatedButton(
+                  onPressed: _requestPermissions,
+                  child: Text('Grant Permissions'),
+                )
+              else
+                Text(
+                  'Permissions granted! You can now access the gallery.',
+                  style: TextStyle(color: Colors.green),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
