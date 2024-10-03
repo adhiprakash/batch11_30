@@ -1,0 +1,25 @@
+import 'package:flutter/material.dart';
+import 'package:sample_app/screens/authenticate/signin.dart';
+import 'package:sample_app/screens/authenticate/signup.dart';
+
+class Authenticate extends StatefulWidget {
+  const Authenticate({super.key});
+
+  @override
+  State<Authenticate> createState() => _AuthenticateState();
+}
+
+class _AuthenticateState extends State<Authenticate> {
+  bool isNew = false;
+
+  void toggleView() {
+    setState(() {
+      isNew = !isNew;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return isNew ? SignUp(toggleView: toggleView,) : SignIn(toggleView: toggleView,);
+  }
+}
