@@ -1,0 +1,96 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:sample_app/utils/auth.dart';
+
+class SignIn extends StatefulWidget {
+  const SignIn({super.key, required this.toggleView});
+  final void Function() toggleView;
+
+  @override
+  State<SignIn> createState() => _SignUpState();
+}
+
+class _SignUpState extends State<SignIn> {
+  GlobalKey<FormState> _globalKey = GlobalKey<FormState>();
+  String email = "";
+  String password = "";
+  AuthServices _authServices = AuthServices();
+  bool isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return isLoading ? Loading() : Scaffold(
+      appBar: AppBar(
+        title: const Text("Signin"),
+        backgroundColor: Colors.blue[500],
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              widget.toggleView();
+            },
+            label: Text("Sign up"),
+            icon: Icon(Icons.person),
+          )
+        ],
+      ),
+      body: Container(
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _globalKey,
+          child: Column(
+            children: [
+              TextFormField(
+                validator: (value) => (value ?? "").isEmpty ? "Email cannot be empty" : null,
+                onChanged: (value) {
+                  setState(() {
+                    email = value;
+                  });
+                },
+                decoration: InputDecoration(
+                  labelText: "Email",
+                ),
+              ),
+              TextFormField(
+                validator: (value) => (value ?? "").length < 6 ? "password must contain atleast 6 char" : null,
+                onChanged: (value) {
+                  setState(() {
+                    password = value;
+                  });
+                },
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: "Password",
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if(_globalKey.currentState?.validate() ?? false) {
+                    setState(() => isLoading = true);
+                    final res = await _authServices.signInWithEmailAndPassword(email: email, password: password);
+                    setState(() => isLoading = false);
+                  }
+                },
+                child: Text("Sign in"),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class Loading extends StatelessWidget {
+  const Loading({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SpinKitDualRing(
+        color: Colors.red,
+        size: 50,
+      ),
+    );
+  }
+}
